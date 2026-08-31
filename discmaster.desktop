@@ -2,8 +2,8 @@
 Name=DiscMaster
 GenericName=Optical Disc Studio & Ripper
 Comment=Extract, convert, stitch, and rip CD/VCD/DVD optical media
-Exec=/run/media/punit/DATA/CD_DATA/DiscMaster/run.sh
-Icon=/run/media/punit/DATA/CD_DATA/DiscMaster/assets/discmaster.png
+Exec=/home/punit/Local_Codebase/Projects/DiscMaster/run.sh
+Icon=/home/punit/Local_Codebase/Projects/DiscMaster/assets/discmaster.png
 Terminal=false
 Type=Application
 Categories=AudioVideo;Audio;Video;AudioVideoEditing;DiscBurning;
