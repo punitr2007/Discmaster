@@ -1,0 +1,24 @@
+# Ignore Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Build & packaging artifacts
+build/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Temporary and OS files
+*.tmp
+*.log
+.DS_Store
+Thumbs.db
+.directory

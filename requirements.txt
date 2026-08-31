@@ -1,0 +1,5 @@
+# DiscMaster Requirements
+# Standard Library only (tkinter, threading, subprocess, json, struct, etc.)
+# System packages needed on Linux:
+# - tk (e.g. `sudo pacman -S tk` or `sudo apt install python3-tk`)
+# - ffmpeg / ffprobe (`sudo pacman -S ffmpeg` or `sudo apt install ffmpeg`)
