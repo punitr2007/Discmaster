@@ -1,0 +1,59 @@
+name: Release AppImage
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk ffmpeg libfuse2 squashfs-tools
+
+      - name: Build AppImage
+        run: |
+          chmod +x build_appimage.sh
+          ./build_appimage.sh
+
+      - name: Create GitHub Release and Upload AppImage
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "DiscMaster ${{ github.ref_name }} — Classic GTK Studio & Recovery Suite"
+          tag_name: ${{ github.ref_name }}
+          files: dist/DiscMaster-x86_64.AppImage
+          draft: false
+          prerelease: false
+          body: |
+            ## 💿 DiscMaster ${{ github.ref_name }} Release Notes
+
+            ### 🎨 Major UI & Aesthetic Overhaul (Classic GTK / Brasero Theme)
+            - **Adwaita Desktop Palette**: Modernized the visual experience with clean neutral desktop tones (`#f5f6f7` window background, `#ffffff` content surfaces, dark charcoal `#2e3436` typography, and `#3584e4` GNOME Blue accents).
+            - **Desktop Menu Bar**: Added native desktop menus (*Disc*, *Tools*, *View*, *Help*) with full keyboard shortcut bindings (`Ctrl+R`, `Ctrl+O`, `Ctrl+L`, `Ctrl+1..5`, `Ctrl+Q`).
+            - **Header Bar & Status Display**: Added an optical drive hardware indicator chip, quick rescan trigger, and status bar.
+            - **Collapsible Activity Drawer**: Diagnostic output terminal can now be toggled on/off to keep the interface clean and distraction-free.
+
+            ### ✨ Core Features & Engine Capabilities
+            - **Live Disc Ripper**: Direct ripping and transcoding of **Video CD (VCD)** `.DAT` tracks, **DVD Video** chapter sequences, and **Audio CD (CDDA)** direct extraction.
+            - **Image Converter**: Native CUE/BIN splitting without mounting tools, TOC-to-CUE conversion, raw CD-ROM XA 2352-byte sector header stripping, and PTS/DTS timestamp repair.
+            - **Video Stitcher**: Visual playlist manager for re-ordering and concatenating video segments with optional force re-encoding.
+            - **Audio Extractor**: Multi-format audio extraction (MP3, WAV, FLAC, AAC) with directory batch processing.
+            - **Media Inspector**: Real-time `ffprobe` stream metadata, bitrates, resolutions, and codecs viewer.
+
+            ### 📦 Download & Running
+            ```bash
+            # Make executable and run
+            chmod +x DiscMaster-x86_64.AppImage
+            ./DiscMaster-x86_64.AppImage
+            ```
