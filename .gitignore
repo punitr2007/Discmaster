@@ -6,6 +6,7 @@ __pycache__/
 
 # Build & packaging artifacts
 build/
+dist/
 *.egg-info/
 .installed.cfg
 *.egg
@@ -15,6 +16,8 @@ build/
 venv/
 ENV/
 env/
+.myenv/
+*.env*
 
 # Temporary and OS files
 *.tmp
