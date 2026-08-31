@@ -16,12 +16,15 @@ mkdir -p "$DIST_DIR"
 cp "$SCRIPT_DIR/discmaster.py" "$APP_DIR/usr/bin/discmaster.py"
 cp "$SCRIPT_DIR/discmaster_engine.py" "$APP_DIR/usr/bin/discmaster_engine.py"
 cp "$SCRIPT_DIR/fix_vcd_video.py" "$APP_DIR/usr/bin/fix_vcd_video.py"
+cp -r "$SCRIPT_DIR/assets" "$APP_DIR/usr/bin/assets"
+cp -r "$SCRIPT_DIR/assets" "$APP_DIR/assets"
 chmod +x "$APP_DIR/usr/bin/"*.py
 
 # Copy Icon and Desktop file
 cp "$SCRIPT_DIR/assets/discmaster.png" "$APP_DIR/discmaster.png"
 cp "$SCRIPT_DIR/assets/discmaster.png" "$APP_DIR/usr/share/icons/hicolor/256x256/apps/discmaster.png"
 cp "$SCRIPT_DIR/assets/discmaster.svg" "$APP_DIR/discmaster.svg"
+
 
 cat << 'EOF' > "$APP_DIR/discmaster.desktop"
 [Desktop Entry]

@@ -20,7 +20,8 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-tk ffmpeg libfuse2 squashfs-tools
+          sudo apt-get install -y python3-tk ffmpeg cdparanoia cdrdao libfuse2 squashfs-tools
+
 
       - name: Build AppImage
         run: |
