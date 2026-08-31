@@ -5,8 +5,9 @@
 # using the Python standard library (tkinter, threading, subprocess, json, struct, etc.).
 #
 # Ensure system-level dependencies are installed on Linux:
-# - Tkinter: `sudo apt install python3-tk` or `sudo pacman -S tk`
-# - FFmpeg:  `sudo apt install ffmpeg`     or `sudo pacman -S ffmpeg`
+# - Tkinter:    `sudo apt install python3-tk`  or `sudo pacman -S tk`
+# - FFmpeg:     `sudo apt install ffmpeg`      or `sudo pacman -S ffmpeg`
+# - CDDA Audio: `sudo apt install cdparanoia`  or `sudo pacman -S cdparanoia`
 
 # Optional GUI & Image Enhancements:
 Pillow>=10.0.0

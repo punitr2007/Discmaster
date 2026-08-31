@@ -30,7 +30,6 @@ AUDIO_RATE    = "44100"
 
 def get_ffmpeg_path():
     """Check if ffmpeg is in PATH or workspace. Return command string."""
-    # Simple check
     try:
         subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return "ffmpeg"
@@ -44,6 +43,15 @@ def get_ffprobe_path():
         return "ffprobe"
     except FileNotFoundError:
         return None
+
+def get_cdparanoia_path():
+    """Check if cdparanoia is in PATH. Return command string."""
+    try:
+        subprocess.run(["cdparanoia", "-V"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return "cdparanoia"
+    except FileNotFoundError:
+        return None
+
 
 def detect_optical_drives():
     """
@@ -770,3 +778,169 @@ def extract_audio(input_file: str, output_path: str, format_type: str = "mp3", l
 
     process.wait()
     return process.returncode == 0
+
+# ── Audio CD (CDDA) Ripping ────────────────────────────────────────────────
+
+def query_audio_cd_tracks(drive_path: str):
+    """
+    Query optical drive for CDDA audio tracks using cdparanoia.
+    Returns a list of dicts: [{'track': 1, 'sectors': 27725, 'length': '06:09.50'}, ...]
+    """
+    cdparanoia = get_cdparanoia_path()
+    if not cdparanoia:
+        return None
+    try:
+        cmd = [cdparanoia, "-d", drive_path, "-Q"]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        output = res.stderr + "\n" + res.stdout
+        tracks = []
+        for line in output.splitlines():
+            m = re.match(r'^\s*(\d+)\.\s+(\d+)\s+\[([^\]]+)\]', line)
+            if m:
+                tracks.append({
+                    'track': int(m.group(1)),
+                    'sectors': int(m.group(2)),
+                    'length': m.group(3)
+                })
+        return tracks if tracks else None
+    except Exception:
+        return None
+
+def rip_audio_cd(drive_path: str, output_dir: str, format_type: str = "mp3", logger=None, progress_callback=None, cancel_event=None):
+    """
+    Automated high-quality Audio CD (CDDA) ripper with jitter correction,
+    disc table of contents detection, and multi-format transcoding (MP3, WAV, FLAC, AAC).
+    """
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+
+    cdparanoia = get_cdparanoia_path()
+    ffmpeg = get_ffmpeg_path()
+
+    if logger:
+        logger(f"[AUDIO CD RIPPER] Initializing CDDA extraction on drive: {drive_path}")
+
+    # Method 1: cdparanoia (Native Linux CDDA standard)
+    if cdparanoia and (sys.platform != 'win32' or os.path.exists(drive_path)):
+        if logger:
+            logger("[INFO] Querying Disc Table of Contents (TOC) with cdparanoia...")
+        
+        tracks = query_audio_cd_tracks(drive_path)
+        if not tracks:
+            if logger:
+                logger("[INFO] Disc query returned no explicit TOC. Attempting direct batch scan...")
+            tracks = [{'track': i, 'sectors': 0, 'length': 'Unknown'} for i in range(1, 40)]
+            is_blind_scan = True
+        else:
+            if logger:
+                logger(f"[SUCCESS] Detected {len(tracks)} audio track(s) on Audio CD:")
+                for t in tracks:
+                    logger(f"  • Track {t['track']:02d}: Length {t['length']} ({t['sectors']} sectors)")
+            is_blind_scan = False
+
+        total_tracks = len(tracks)
+        ripped_count = 0
+
+        for idx, t_info in enumerate(tracks, 1):
+            if cancel_event and cancel_event.is_set():
+                if logger:
+                    logger("[CANCELLED] Audio CD ripping stopped by user.")
+                return False
+
+            track_num = t_info['track']
+            final_out = os.path.join(output_dir, f"Track_{track_num:02d}.{format_type}")
+            tmp_wav = os.path.join(output_dir, f".tmp_cdda_track_{track_num:02d}.wav")
+
+            if logger:
+                logger(f"[TRACK {track_num:02d}] Ripping raw audio sectors (jitter-corrected)...")
+
+            # Extract raw WAV with cdparanoia
+            cmd_rip = [cdparanoia, "-d", drive_path, "-w", str(track_num), tmp_wav]
+            res_rip = subprocess.run(cmd_rip, capture_output=True, text=True)
+
+            if res_rip.returncode != 0 or not os.path.exists(tmp_wav) or os.path.getsize(tmp_wav) == 0:
+                if os.path.exists(tmp_wav):
+                    try:
+                        os.remove(tmp_wav)
+                    except Exception:
+                        pass
+                if is_blind_scan:
+                    break
+                else:
+                    if logger:
+                        logger(f"[ERROR] Extraction failed for Track {track_num:02d}: {res_rip.stderr.strip()}")
+                    continue
+
+            # Transcode / Move to destination format
+            if format_type == "wav":
+                import shutil
+                shutil.move(tmp_wav, final_out)
+            else:
+                if logger:
+                    logger(f"[TRACK {track_num:02d}] Encoding to {format_type.upper()}...")
+                if format_type == "mp3":
+                    enc_cmd = [ffmpeg, "-y", "-i", tmp_wav, "-c:a", "libmp3lame", "-b:a", "320k", final_out]
+                elif format_type == "flac":
+                    enc_cmd = [ffmpeg, "-y", "-i", tmp_wav, "-c:a", "flac", final_out]
+                elif format_type == "aac":
+                    enc_cmd = [ffmpeg, "-y", "-i", tmp_wav, "-c:a", "aac", "-b:a", "256k", final_out]
+                else:
+                    enc_cmd = [ffmpeg, "-y", "-i", tmp_wav, final_out]
+
+                res_enc = subprocess.run(enc_cmd, capture_output=True, text=True)
+                if os.path.exists(tmp_wav):
+                    try:
+                        os.remove(tmp_wav)
+                    except Exception:
+                        pass
+
+                if res_enc.returncode != 0:
+                    if logger:
+                        logger(f"[WARNING] Transcoding failed for Track {track_num:02d}. Retaining WAV format.")
+                    final_out = os.path.join(output_dir, f"Track_{track_num:02d}.wav")
+                    import shutil
+                    shutil.move(tmp_wav, final_out)
+
+            ripped_count += 1
+            if logger:
+                logger(f"[SUCCESS] Saved Track {track_num:02d} → {os.path.basename(final_out)}")
+
+            if progress_callback:
+                progress_callback((idx / total_tracks) * 100)
+
+        if logger:
+            logger(f"[SUCCESS] Audio CD extraction complete! Total tracks ripped: {ripped_count}")
+        return ripped_count > 0
+
+    # Method 2: FFmpeg fallback (Windows or Linux builds with cdda protocol)
+    if ffmpeg:
+        letter_clean = drive_path.replace(":", "").strip()
+        ripped_count = 0
+        if logger:
+            logger("[INFO] Attempting FFmpeg CDDA protocol fallback...")
+        for track in range(1, 40):
+            if cancel_event and cancel_event.is_set():
+                break
+            out_file = os.path.join(output_dir, f"Track_{track:02d}.{format_type}")
+            cmd = [ffmpeg, "-y", "-i", f"cdda://{letter_clean}:{track}", out_file]
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode == 0 and os.path.exists(out_file) and os.path.getsize(out_file) > 0:
+                if logger:
+                    logger(f"[SUCCESS] Extracted track {track} → {os.path.basename(out_file)}")
+                ripped_count += 1
+                if progress_callback:
+                    progress_callback(min(100.0, track * 5))
+            else:
+                if os.path.exists(out_file):
+                    os.remove(out_file)
+                break
+
+        if ripped_count > 0:
+            if logger:
+                logger(f"[SUCCESS] Audio CD extraction complete! Total tracks ripped: {ripped_count}")
+            return True
+
+    if logger:
+        logger("[ERROR] Audio CD extraction failed. Please ensure cdparanoia is installed (`sudo pacman -S cdparanoia` or `sudo apt install cdparanoia`) and the disc is an Audio CD.")
+    return False
+

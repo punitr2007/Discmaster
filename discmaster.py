@@ -647,34 +647,28 @@ class DiscMasterApp(tk.Tk):
         self.progress_queue.put(100)
 
     def thread_rip_cdda(self, drive_letter, output_dir):
-        self.log_queue.put(f"[RIPPING AUDIO CD] Attempting CDDA rip on drive {drive_letter}...\n")
+        self.log_queue.put(f"[RIPPING AUDIO CD] Initiating automated CDDA extraction on {drive_letter}...\n")
         fmt = self.audio_rip_format.get()
-        ffmpeg = engine.get_ffmpeg_path()
-        letter_clean = drive_letter.replace(":", "").strip()
         
-        self.log_queue.put(f"[INFO] Ripping tracks using cdda protocol on drive {letter_clean}...\n")
-        ripped_count = 0
-        for track in range(1, 40):
-            if self.cancel_event.is_set():
-                break
-            out_file = os.path.join(output_dir, f"track_{track:02d}.{fmt}")
-            cmd = [ffmpeg, "-y", "-i", f"cdda://{letter_clean}:{track}", out_file]
-            
-            self.log_queue.put(f"Ripping track {track}: Command: {' '.join(cmd)}\n")
-            res = subprocess.run(cmd, capture_output=True, text=True)
-            if res.returncode == 0:
-                self.log_queue.put(f"[SUCCESS] Extracted track {track} successfully → {os.path.basename(out_file)}\n")
-                ripped_count += 1
-            else:
-                if track == 1:
-                    self.log_queue.put("[ERROR] Track 1 rip failed. The drive might be empty or media unsupported.\n")
-                    self.log_queue.put("Hint: You can rip the disc as a raw image (.bin/.cue) using cdrdao/readcd, then use 'Image Converter' tab to split it.\n")
-                    break
-                else:
-                    self.log_queue.put(f"[INFO] Completed audio CD tracks. Total tracks ripped: {ripped_count}\n")
-                    break
+        def update_prog(pct):
+            self.progress_queue.put(pct)
+
+        success = engine.rip_audio_cd(
+            drive_path=drive_letter,
+            output_dir=output_dir,
+            format_type=fmt,
+            logger=lambda msg: self.log_queue.put(msg + "\n"),
+            progress_callback=update_prog,
+            cancel_event=self.cancel_event
+        )
+
+        if success:
+            self.log_queue.put("[SUCCESS] Audio CD tracks extracted and encoded successfully!\n")
+        else:
+            self.log_queue.put("[ERROR] Audio CD rip failed or was cancelled.\n")
         
         self.progress_queue.put(100)
+
 
     # ── TAB 2: Image/File Converter ────────────────────────────────────────
 
@@ -1591,25 +1585,31 @@ class DiscMasterApp(tk.Tk):
     def check_system_dependencies(self):
         ffmpeg = engine.get_ffmpeg_path()
         ffprobe = engine.get_ffprobe_path()
+        cdparanoia = engine.get_cdparanoia_path()
         
         dep_msg = []
         if not ffmpeg:
-            dep_msg.append("• ffmpeg was not found in system PATH. Video transcoding and extraction features will fail.")
+            dep_msg.append("• ffmpeg is missing. Video transcoding and conversion features will fail.")
         if not ffprobe:
-            dep_msg.append("• ffprobe was not found in system PATH. Media details detection will be disabled.")
+            dep_msg.append("• ffprobe is missing. Media metadata detection will be disabled.")
+        if sys.platform != 'win32' and not cdparanoia:
+            dep_msg.append("• cdparanoia is recommended on Linux for native Audio CD (CDDA) ripping (`sudo pacman -S cdparanoia` or `sudo apt install cdparanoia`).")
             
         if dep_msg:
-            self.write_log("[SYSTEM WARNING] Missing dependencies:\n" + "\n".join(dep_msg) + "\n\nPlease ensure ffmpeg and ffprobe are installed and in your environment PATH variables.\n", is_warn=True)
+            self.write_log("[SYSTEM NOTICE] Dependencies:\n" + "\n".join(dep_msg) + "\n\n", is_warn=True)
 
     def show_dependencies_dialog(self):
         ffmpeg = engine.get_ffmpeg_path()
         ffprobe = engine.get_ffprobe_path()
+        cdparanoia = engine.get_cdparanoia_path()
         
         status_ffmpeg = f"Found ({ffmpeg})" if ffmpeg else "MISSING (Please install ffmpeg)"
         status_ffprobe = f"Found ({ffprobe})" if ffprobe else "MISSING (Please install ffprobe)"
+        status_cdp = f"Found ({cdparanoia})" if cdparanoia else "MISSING (Recommended for Audio CDs on Linux: cdparanoia)"
         
-        info = f"System Dependency Diagnostics:\n\n• FFmpeg: {status_ffmpeg}\n• FFprobe: {status_ffprobe}\n• Python Version: {sys.version.split()[0]}\n• Platform: {sys.platform}"
+        info = f"System Dependency Diagnostics:\n\n• FFmpeg: {status_ffmpeg}\n• FFprobe: {status_ffprobe}\n• cdparanoia (CDDA): {status_cdp}\n• Python Version: {sys.version.split()[0]}\n• Platform: {sys.platform}"
         messagebox.showinfo("System Dependencies", info)
+
 
     def open_workspace_dir(self):
         folder = filedialog.askdirectory(initialdir=self.workspace_dir)
